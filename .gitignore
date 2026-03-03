@@ -1,0 +1,8 @@
+node_modules/
+dist/
+data/
+.env
+.claude/
+*.mp3
+public/app.js
+public/app.js.map
