@@ -15,6 +15,27 @@ let playlistId: string | null = null;
 let playlistMeta: PlaylistMeta | null = null;
 let playlistFiles: FileMeta[] = [];
 
+function normalizeSegmentGaps(segs: Segment[]): Segment[] {
+  for (let i = 0; i < segs.length - 1; i++) {
+    const gap = segs[i + 1].start - segs[i].end;
+    if (gap < 0.02) {
+      segs[i].end = segs[i + 1].start - 0.02;
+    }
+  }
+  return segs;
+}
+
+function seekToSegment(index: number, andPlay = true) {
+  if (!audio || !segments[index]) return;
+  currentIndex = index;
+  highlightSegment();
+  audio.pause();
+  audio.currentTime = segments[index].start;
+  if (andPlay) {
+    audio.addEventListener('seeked', () => audio!.play(), { once: true });
+  }
+}
+
 export function renderPlayer(container: HTMLElement, id: string, plId?: string) {
   fileId = id;
   playlistId = plId || null;
@@ -86,7 +107,7 @@ async function init(container: HTMLElement, id: string) {
   // Load STT
   const stt = await api.getStt(id);
   if (stt && stt.segments) {
-    segments = stt.segments;
+    segments = normalizeSegmentGaps(stt.segments);
     renderSegmentBar(stt.duration || fileMeta.duration || 0);
     renderSubtitles();
   }
@@ -311,27 +332,22 @@ function prevSegment() {
   const cur = segments[currentIndex];
   if (cur && audio.currentTime - cur.start > 1 && currentIndex >= 0) {
     // Replay current if more than 1 second in
-    audio.currentTime = cur.start;
+    seekToSegment(currentIndex);
   } else if (currentIndex > 0) {
-    currentIndex--;
-    audio.currentTime = segments[currentIndex].start;
+    seekToSegment(currentIndex - 1);
   }
-  if (audio.paused) audio.play();
 }
 
 function nextSegment() {
   if (!audio || segments.length === 0) return;
   if (currentIndex < segments.length - 1) {
-    currentIndex++;
-    audio.currentTime = segments[currentIndex].start;
-    if (audio.paused) audio.play();
+    seekToSegment(currentIndex + 1);
   }
 }
 
 function replaySegment() {
   if (!audio || currentIndex < 0 || currentIndex >= segments.length) return;
-  audio.currentTime = segments[currentIndex].start;
-  if (audio.paused) audio.play();
+  seekToSegment(currentIndex);
 }
 
 function changeSpeed(delta: number) {
@@ -372,9 +388,7 @@ function updateCurrentSegment(time: number) {
     audio &&
     !audio.paused
   ) {
-    audio.pause();
-    // Stay at start of new segment
-    audio.currentTime = segments[newIndex].start;
+    seekToSegment(newIndex, false);
   }
 
   // Loop mode
@@ -386,7 +400,7 @@ function updateCurrentSegment(time: number) {
   ) {
     const seg = segments[currentIndex];
     if (time >= seg.end) {
-      audio.currentTime = seg.start;
+      seekToSegment(currentIndex);
       return;
     }
   }
@@ -418,11 +432,8 @@ function renderSegmentBar(totalDuration: number) {
   bar.querySelectorAll('.seg-block').forEach((block) => {
     block.addEventListener('click', () => {
       const idx = parseInt((block as HTMLElement).dataset.index!, 10);
-      if (audio && segments[idx]) {
-        audio.currentTime = segments[idx].start;
-        currentIndex = idx;
-        highlightSegment();
-        if (audio.paused) audio.play();
+      if (segments[idx]) {
+        seekToSegment(idx);
       }
     });
   });
@@ -451,11 +462,8 @@ function renderSubtitles() {
   rows.querySelectorAll('.subtitle-row').forEach((row) => {
     row.addEventListener('click', () => {
       const idx = parseInt((row as HTMLElement).dataset.index!, 10);
-      if (audio && segments[idx]) {
-        audio.currentTime = segments[idx].start;
-        currentIndex = idx;
-        highlightSegment();
-        if (audio.paused) audio.play();
+      if (segments[idx]) {
+        seekToSegment(idx);
       }
     });
   });
