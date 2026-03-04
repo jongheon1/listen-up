@@ -55,7 +55,8 @@ export class SttService {
 
       const words: { word: string; start: number; end: number }[] =
         (transcription as any).words || [];
-      const segments = this.buildSentenceSegments(words);
+      const fullText: string = (transcription as any).text || '';
+      const segments = this.buildSentenceSegments(words, fullText);
 
       // 2. Translate with GPT
       const translated = await this.translateSegments(segments);
@@ -84,10 +85,10 @@ export class SttService {
 
   private buildSentenceSegments(
     words: { word: string; start: number; end: number }[],
+    fullText: string,
   ): Segment[] {
     if (words.length === 0) return [];
 
-    const fullText = words.map((w) => w.word).join(' ');
     const sentences: string[] = sbd.sentences(fullText);
 
     const segments: Segment[] = [];
