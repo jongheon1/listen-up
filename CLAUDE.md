@@ -60,6 +60,14 @@ For multi-step tasks, state a brief plan:
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
+## 5. Commit After Every Change
+
+After completing each task or logical unit of work, immediately create a git commit.
+
+## 6. STT·문장 분리 수정 시 반드시 테스트
+
+`src/stt/stt.service.ts`의 `buildSentenceSegments()` 또는 문장 분리 관련 코드를 수정할 경우, 반드시 실제 오디오 파일로 STT를 돌려 문장이 정상적으로 여러 개로 분리되는지 검증한다.
+
 ---
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
