@@ -110,6 +110,13 @@ export class SttService {
       wordIdx = endIdx + 1;
     }
 
+    for (let i = 0; i < segments.length - 1; i++) {
+      const gap = segments[i + 1].start - segments[i].end;
+      if (gap < 0.02) {
+        segments[i].end = segments[i + 1].start - 0.02;
+      }
+    }
+
     return segments;
   }
 
