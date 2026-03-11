@@ -2,13 +2,14 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MetaService } from '../meta/meta.service.js';
 import OpenAI from 'openai';
-import { writeFile, mkdir } from 'fs/promises';
+import { readFile, writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import sbd from 'sbd';
 import type { SttProvider } from './providers/stt-provider.interface.js';
 
 const STT_DIR = join(process.cwd(), 'data', 'stt');
 const AUDIO_DIR = join(process.cwd(), 'data', 'audio');
+const SETTINGS_PATH = join(process.cwd(), 'data', 'settings.json');
 
 export interface Segment {
   id: number;
@@ -31,6 +32,22 @@ export class SttService {
     this.openai = new OpenAI({
       apiKey: this.configService.get<string>('OPENAI_API_KEY'),
     });
+  }
+
+  private async getLangSettings(): Promise<{ sourceLang: string; targetLang: string }> {
+    try {
+      const data = await readFile(SETTINGS_PATH, 'utf-8');
+      const saved = JSON.parse(data);
+      return {
+        sourceLang: saved.sourceLang || this.configService.get<string>('SOURCE_LANG') || 'English',
+        targetLang: saved.targetLang || this.configService.get<string>('TARGET_LANG') || 'Korean',
+      };
+    } catch {
+      return {
+        sourceLang: this.configService.get<string>('SOURCE_LANG') || 'English',
+        targetLang: this.configService.get<string>('TARGET_LANG') || 'Korean',
+      };
+    }
   }
 
   async processFile(fileId: string): Promise<void> {
@@ -134,6 +151,7 @@ export class SttService {
   private async translateSegments(segments: Segment[]): Promise<Segment[]> {
     if (segments.length === 0) return segments;
 
+    const { sourceLang, targetLang } = await this.getLangSettings();
     const CHUNK_SIZE = 50;
     const result = [...segments];
 
@@ -148,9 +166,9 @@ export class SttService {
             {
               role: 'system',
               content:
-                'You are a translator. Translate each English sentence to Korean. ' +
-                'Input format: "id|English sentence" (one per line). ' +
-                'Output format: "id|Korean translation" (one per line). ' +
+                `You are a translator. Translate each ${sourceLang} sentence to ${targetLang}. ` +
+                `Input format: "id|${sourceLang} sentence" (one per line). ` +
+                `Output format: "id|${targetLang} translation" (one per line). ` +
                 'Keep the same id numbers. Only output translations, nothing else.',
             },
             { role: 'user', content: input },

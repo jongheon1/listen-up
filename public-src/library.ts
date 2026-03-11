@@ -5,9 +5,35 @@ import { navigateTo } from './main';
 let pollTimer: number | null = null;
 let cachedFiles: FileMeta[] = [];
 
+const LANGUAGES = [
+  'English', 'Korean', 'Japanese', 'Chinese', 'Spanish',
+  'French', 'German', 'Portuguese', 'Italian', 'Russian',
+  'Arabic', 'Hindi', 'Thai', 'Vietnamese', 'Indonesian',
+  'Dutch', 'Turkish', 'Polish', 'Swedish',
+];
+
 export function renderLibrary(container: HTMLElement) {
   container.innerHTML = `
     <div class="library">
+      <div class="lang-settings">
+        <h3>Language</h3>
+        <div class="lang-selects">
+          <label>
+            <span>Source</span>
+            <select id="source-lang">
+              ${LANGUAGES.map(l => `<option value="${l}">${l}</option>`).join('')}
+            </select>
+          </label>
+          <span class="lang-arrow">&rarr;</span>
+          <label>
+            <span>Target</span>
+            <select id="target-lang">
+              ${LANGUAGES.map(l => `<option value="${l}">${l}</option>`).join('')}
+            </select>
+          </label>
+          <button id="lang-save-btn" class="lang-save-btn">Save</button>
+        </div>
+      </div>
       <div id="resume-banner" class="resume-banner" style="display:none"></div>
       <div class="upload-area" id="upload-area">
         <p>Drag & drop .mp3 files here or click to upload</p>
@@ -40,6 +66,7 @@ export function renderLibrary(container: HTMLElement) {
   setupUpload(container);
   loadFiles();
   loadPlaylists();
+  loadLangSettings();
 }
 
 export function destroyLibrary() {
@@ -337,6 +364,27 @@ function setupDragReorder(container: HTMLElement, playlistId: string, playlist: 
       dragIndex = null;
       container.querySelectorAll('.drag-over').forEach((d) => d.classList.remove('drag-over'));
     });
+  });
+}
+
+async function loadLangSettings() {
+  try {
+    const settings = await api.getSettings();
+    const srcSelect = document.getElementById('source-lang') as HTMLSelectElement;
+    const tgtSelect = document.getElementById('target-lang') as HTMLSelectElement;
+    srcSelect.value = settings.sourceLang;
+    tgtSelect.value = settings.targetLang;
+  } catch {}
+
+  document.getElementById('lang-save-btn')!.addEventListener('click', async () => {
+    const srcSelect = document.getElementById('source-lang') as HTMLSelectElement;
+    const tgtSelect = document.getElementById('target-lang') as HTMLSelectElement;
+    try {
+      await api.updateSettings(srcSelect.value, tgtSelect.value);
+      const btn = document.getElementById('lang-save-btn')!;
+      btn.textContent = 'Saved!';
+      setTimeout(() => { btn.textContent = 'Save'; }, 1500);
+    } catch {}
   });
 }
 

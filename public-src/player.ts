@@ -75,8 +75,8 @@ export function renderPlayer(container: HTMLElement, id: string, plId?: string) 
         <div id="segment-bar" class="segment-bar"></div>
         <div class="subtitle-panel" id="subtitle-panel">
           <div class="subtitle-header">
-            <span class="subtitle-col-header">English</span>
-            <span class="subtitle-col-header">Korean</span>
+            <span class="subtitle-col-header" id="source-lang-header">English</span>
+            <span class="subtitle-col-header" id="target-lang-header">Korean</span>
           </div>
           <div class="subtitle-rows" id="subtitle-rows"></div>
         </div>
@@ -106,6 +106,13 @@ async function init(container: HTMLElement, id: string) {
   }
 
   document.getElementById('file-title')!.textContent = fileMeta.originalName;
+
+  // Load language settings
+  try {
+    const settings = await api.getSettings();
+    document.getElementById('source-lang-header')!.textContent = settings.sourceLang;
+    document.getElementById('target-lang-header')!.textContent = settings.targetLang;
+  } catch {}
 
   // Setup audio
   audio = new Audio(api.audioUrl(id));

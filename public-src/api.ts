@@ -8,6 +8,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export async function getSettings(): Promise<{ sourceLang: string; targetLang: string }> {
+  return request('/settings');
+}
+
+export async function updateSettings(sourceLang: string, targetLang: string): Promise<{ sourceLang: string; targetLang: string }> {
+  return request('/settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sourceLang, targetLang }),
+  });
+}
+
 export async function listFiles(): Promise<{
   files: FileMeta[];
   lastPlayedFileId: string | null;

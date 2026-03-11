@@ -6,6 +6,7 @@ import { MetaModule } from './meta/meta.module.js';
 import { FilesModule } from './files/files.module.js';
 import { SttModule } from './stt/stt.module.js';
 import { PlaylistsModule } from './playlists/playlists.module.js';
+import { SettingsController } from './settings/settings.controller.js';
 
 @Module({
   imports: [
@@ -18,5 +19,6 @@ import { PlaylistsModule } from './playlists/playlists.module.js';
     SttModule,
     PlaylistsModule,
   ],
+  controllers: [SettingsController],
 })
 export class AppModule {}
