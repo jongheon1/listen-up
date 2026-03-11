@@ -1,8 +1,32 @@
+# Dependencies
 node_modules/
+
+# Build output
 dist/
-data/
-.env
-.claude/
-*.mp3
 public/app.js
 public/app.js.map
+
+# Runtime data
+data/
+
+# Environment
+.env
+
+# Claude Code
+.claude/
+
+# Audio files
+*.mp3
+
+# Python
+__pycache__/
+*.pyc
+
+# OS
+Thumbs.db
+.DS_Store
+
+# IDE
+.idea/
+*.swp
+*.swo
