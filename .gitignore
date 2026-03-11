@@ -11,6 +11,7 @@ data/
 
 # Environment
 .env
+*.pem
 
 # Claude Code
 .claude/
@@ -32,4 +33,4 @@ Thumbs.db
 *.swo
 
 
-.docs
+docs/
