@@ -1,11 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MetaService } from '../meta/meta.service.js';
 import OpenAI from 'openai';
-import { createReadStream } from 'fs';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import sbd from 'sbd';
+import type { SttProvider } from './providers/stt-provider.interface.js';
 
 const STT_DIR = join(process.cwd(), 'data', 'stt');
 const AUDIO_DIR = join(process.cwd(), 'data', 'audio');
@@ -26,6 +26,7 @@ export class SttService {
   constructor(
     private readonly metaService: MetaService,
     private readonly configService: ConfigService,
+    @Inject('STT_PROVIDER') private readonly provider: SttProvider,
   ) {
     this.openai = new OpenAI({
       apiKey: this.configService.get<string>('OPENAI_API_KEY'),
@@ -44,25 +45,20 @@ export class SttService {
     try {
       await mkdir(STT_DIR, { recursive: true });
 
-      // 1. Whisper transcription
+      // 1. Transcription via provider
       const audioPath = join(AUDIO_DIR, file.filename);
-      const transcription = await this.openai.audio.transcriptions.create({
-        file: createReadStream(audioPath),
-        model: 'whisper-1',
-        response_format: 'verbose_json',
-        timestamp_granularities: ['word'],
-      });
+      const transcription = await this.provider.transcribe(audioPath);
 
-      const words: { word: string; start: number; end: number }[] =
-        (transcription as any).words || [];
-      const fullText: string = (transcription as any).text || '';
-      const segments = this.buildSentenceSegments(words, fullText);
+      const segments = this.buildSentenceSegments(
+        transcription.words,
+        transcription.text,
+      );
 
       // 2. Translate with GPT
       const translated = await this.translateSegments(segments);
 
       // 3. Save results
-      const duration = (transcription as any).duration || null;
+      const duration = transcription.duration;
       const result = { segments: translated, duration };
       await writeFile(
         join(STT_DIR, `${file.filename}.json`),
@@ -94,11 +90,27 @@ export class SttService {
     const segments: Segment[] = [];
     let wordIdx = 0;
 
+    const norm = (s: string) =>
+      s.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+
     for (let i = 0; i < sentences.length; i++) {
-      const sentenceWords = sentences[i].trim().split(/\s+/);
-      const start = words[wordIdx]?.start ?? 0;
-      const endIdx = Math.min(wordIdx + sentenceWords.length - 1, words.length - 1);
-      const end = words[endIdx]?.end ?? start;
+      const sentenceNorm = norm(sentences[i]);
+      const startIdx = wordIdx;
+      let accumulated = '';
+
+      while (wordIdx < words.length) {
+        accumulated += norm(words[wordIdx].word);
+        wordIdx++;
+        if (accumulated.length >= sentenceNorm.length) break;
+      }
+
+      // Last sentence absorbs remaining words
+      if (i === sentences.length - 1 && wordIdx < words.length) {
+        wordIdx = words.length;
+      }
+
+      const start = words[startIdx]?.start ?? 0;
+      const end = words[Math.min(wordIdx - 1, words.length - 1)]?.end ?? start;
 
       segments.push({
         id: i,
@@ -107,8 +119,6 @@ export class SttService {
         text: sentences[i].trim(),
         translation: '',
       });
-
-      wordIdx = endIdx + 1;
     }
 
     for (let i = 0; i < segments.length - 1; i++) {

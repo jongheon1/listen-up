@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { MetaService, FileMeta } from '../meta/meta.service.js';
 import { v4 as uuidv4 } from 'uuid';
 import { join } from 'path';
-import { unlink, stat, access, readFile } from 'fs/promises';
+import { unlink, stat, access, readFile, writeFile } from 'fs/promises';
 import { createReadStream } from 'fs';
 
 const AUDIO_DIR = join(process.cwd(), 'data', 'audio');
@@ -28,7 +28,7 @@ export class FilesService {
       const id = uuidv4();
       const meta: FileMeta = {
         id,
-        originalName: file.originalname,
+        originalName: Buffer.from(file.originalname, 'latin1').toString('utf8'),
         filename: file.filename,
         duration: null,
         sttStatus: 'pending',
@@ -110,5 +110,34 @@ export class FilesService {
     const file = this.metaService.getFile(id);
     if (!file) return null;
     return file.progress || { currentTime: 0, segmentIndex: 0 };
+  }
+
+  async updateSegmentTimes(
+    id: string,
+    updates: { id: number; start: number; end: number }[],
+  ): Promise<boolean> {
+    const file = this.metaService.getFile(id);
+    if (!file) return false;
+
+    const sttPath = join(STT_DIR, `${file.filename}.json`);
+    let stt: any;
+    try {
+      const raw = await readFile(sttPath, 'utf-8');
+      stt = JSON.parse(raw);
+    } catch {
+      return false;
+    }
+
+    const updateMap = new Map(updates.map((u) => [u.id, u]));
+    for (const seg of stt.segments) {
+      const u = updateMap.get(seg.id);
+      if (u) {
+        seg.start = u.start;
+        seg.end = u.end;
+      }
+    }
+
+    await writeFile(sttPath, JSON.stringify(stt, null, 2), 'utf-8');
+    return true;
   }
 }

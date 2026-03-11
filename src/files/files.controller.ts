@@ -31,10 +31,11 @@ if (!existsSync(AUDIO_DIR)) {
 const storage = diskStorage({
   destination: AUDIO_DIR,
   filename: (_req, file, cb) => {
-    // Preserve original name, add timestamp suffix if collision
-    const ext = extname(file.originalname);
-    const base = file.originalname.slice(0, -ext.length);
-    let filename = file.originalname;
+    // Multer decodes filename as Latin-1; re-decode as UTF-8 for Korean support
+    const decoded = Buffer.from(file.originalname, 'latin1').toString('utf8');
+    const ext = extname(decoded);
+    const base = decoded.slice(0, -ext.length);
+    let filename = decoded;
     if (existsSync(join(AUDIO_DIR, filename))) {
       filename = `${base}_${Date.now()}${ext}`;
     }
@@ -59,7 +60,8 @@ export class FilesController {
     FilesInterceptor('files', 20, {
       storage,
       fileFilter: (_req, file, cb) => {
-        if (extname(file.originalname).toLowerCase() !== '.mp3') {
+        const decoded = Buffer.from(file.originalname, 'latin1').toString('utf8');
+        if (extname(decoded).toLowerCase() !== '.mp3') {
           cb(new Error('Only .mp3 files are allowed'), false);
           return;
         }
@@ -171,6 +173,18 @@ export class FilesController {
     @Body() body: { currentTime: number; segmentIndex: number },
   ) {
     return this.saveProgress(id, body);
+  }
+
+  @Put(':id/stt/segments')
+  async updateSegmentTimes(
+    @Param('id') id: string,
+    @Body() body: { segments: { id: number; start: number; end: number }[] },
+  ) {
+    const ok = await this.filesService.updateSegmentTimes(id, body.segments);
+    if (!ok) {
+      throw new HttpException('File not found', HttpStatus.NOT_FOUND);
+    }
+    return { success: true };
   }
 
   @Get(':id/progress')

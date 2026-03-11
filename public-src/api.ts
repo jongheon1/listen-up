@@ -57,6 +57,17 @@ export async function saveProgress(
   });
 }
 
+export async function updateSegmentTimes(
+  id: string,
+  segments: { id: number; start: number; end: number }[],
+): Promise<void> {
+  await request(`/files/${id}/stt/segments`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ segments }),
+  });
+}
+
 export async function getProgress(
   id: string,
 ): Promise<{ currentTime: number; segmentIndex: number }> {
