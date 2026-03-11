@@ -14,6 +14,10 @@ let fileMeta: FileMeta | null = null;
 let playlistId: string | null = null;
 let playlistMeta: PlaylistMeta | null = null;
 let playlistFiles: FileMeta[] = [];
+let editMode = false;
+let editSegments: Segment[] | null = null;
+let totalDuration = 0;
+let lastSeekTime = 0;
 
 function normalizeSegmentGaps(segs: Segment[]): Segment[] {
   for (let i = 0; i < segs.length - 1; i++) {
@@ -26,11 +30,13 @@ function normalizeSegmentGaps(segs: Segment[]): Segment[] {
 }
 
 function seekToSegment(index: number, andPlay = true) {
-  if (!audio || !segments[index]) return;
+  const segs = editMode && editSegments ? editSegments : segments;
+  if (!audio || !segs[index]) return;
+  lastSeekTime = Date.now();
   currentIndex = index;
   highlightSegment();
   audio.pause();
-  audio.currentTime = segments[index].start;
+  audio.currentTime = segs[index].start;
   if (andPlay) {
     audio.addEventListener('seeked', () => audio!.play(), { once: true });
   }
@@ -54,6 +60,7 @@ export function renderPlayer(container: HTMLElement, id: string, plId?: string) 
           ${plId ? '<button id="sidebar-toggle" class="icon-btn" title="Playlist">&#9776;</button>' : ''}
           <span id="file-title" class="file-title">Loading...</span>
           <div class="top-controls">
+            <button id="edit-toggle" class="toggle-btn">Edit</button>
             <button id="ap-toggle" class="toggle-btn">AP: OFF</button>
             <span id="speed-display" class="speed-display">1.0x</span>
           </div>
@@ -108,7 +115,8 @@ async function init(container: HTMLElement, id: string) {
   const stt = await api.getStt(id);
   if (stt && stt.segments) {
     segments = normalizeSegmentGaps(stt.segments);
-    renderSegmentBar(stt.duration || fileMeta.duration || 0);
+    totalDuration = stt.duration || fileMeta.duration || 0;
+    renderSegmentBar(totalDuration);
     renderSubtitles();
   }
 
@@ -255,6 +263,95 @@ function setupControls(container: HTMLElement) {
     audio!.playbackRate = idx >= 0 && idx < speeds.length - 1 ? speeds[idx + 1 >= speeds.length ? 0 : idx] : speeds[0];
     speedDisplay.textContent = `${audio!.playbackRate.toFixed(1)}x`;
   });
+
+  const editToggle = document.getElementById('edit-toggle')!;
+  editToggle.addEventListener('click', () => {
+    if (editMode) {
+      exitEditMode();
+    } else {
+      enterEditMode();
+    }
+  });
+}
+
+function enterEditMode() {
+  if (editMode) return;
+  editMode = true;
+  if (audio) audio.pause();
+  editSegments = segments.map((s) => ({ ...s }));
+
+  const editToggle = document.getElementById('edit-toggle')!;
+  editToggle.classList.add('active');
+  editToggle.textContent = 'Edit: ON';
+
+  const bar = document.getElementById('segment-bar')!;
+  bar.classList.add('edit-mode');
+
+  renderSegmentBar(totalDuration);
+  renderSubtitles();
+  renderEditActions();
+}
+
+function exitEditMode() {
+  if (!editMode) return;
+  editMode = false;
+  editSegments = null;
+
+  const editToggle = document.getElementById('edit-toggle')!;
+  editToggle.classList.remove('active');
+  editToggle.textContent = 'Edit';
+
+  const bar = document.getElementById('segment-bar')!;
+  bar.classList.remove('edit-mode');
+
+  renderSegmentBar(totalDuration);
+  renderSubtitles();
+  renderEditActions();
+}
+
+async function saveEditSegments() {
+  if (!editSegments) return;
+  const updates = editSegments.map((s) => ({ id: s.id, start: s.start, end: s.end }));
+  try {
+    await api.updateSegmentTimes(fileId, updates);
+    // Apply edited times to main segments
+    for (const u of updates) {
+      const seg = segments.find((s) => s.id === u.id);
+      if (seg) {
+        seg.start = u.start;
+        seg.end = u.end;
+      }
+    }
+    exitEditMode();
+    showToast('Saved');
+  } catch {
+    showToast('Save failed');
+  }
+}
+
+function renderEditActions() {
+  const keyboardHelp = document.querySelector('.keyboard-help') as HTMLElement;
+  if (!keyboardHelp) return;
+
+  if (editMode) {
+    keyboardHelp.style.display = 'none';
+    let actionsBar = document.querySelector('.edit-actions') as HTMLElement;
+    if (!actionsBar) {
+      actionsBar = document.createElement('div');
+      actionsBar.className = 'edit-actions';
+      keyboardHelp.parentElement!.insertBefore(actionsBar, keyboardHelp.nextSibling);
+    }
+    actionsBar.innerHTML = `
+      <button id="edit-cancel" class="toggle-btn">Cancel</button>
+      <button id="edit-save" class="toggle-btn active">Save</button>
+    `;
+    document.getElementById('edit-cancel')!.addEventListener('click', exitEditMode);
+    document.getElementById('edit-save')!.addEventListener('click', saveEditSegments);
+  } else {
+    keyboardHelp.style.display = '';
+    const actionsBar = document.querySelector('.edit-actions');
+    if (actionsBar) actionsBar.remove();
+  }
 }
 
 function setupKeyboard() {
@@ -370,6 +467,7 @@ let prevIndex = -1;
 
 function updateCurrentSegment(time: number) {
   if (segments.length === 0) return;
+  if (Date.now() - lastSeekTime < 200) return;
 
   // Find current segment (reverse linear scan for efficiency)
   let newIndex = -1;
@@ -415,28 +513,142 @@ function updateCurrentSegment(time: number) {
   updateSegmentBarHighlight();
 }
 
-function renderSegmentBar(totalDuration: number) {
+function renderSegmentBar(dur: number) {
   const bar = document.getElementById('segment-bar')!;
-  if (totalDuration <= 0 || segments.length === 0) {
+  const segs = editMode && editSegments ? editSegments : segments;
+  if (dur <= 0 || segs.length === 0) {
     bar.innerHTML = '';
     return;
   }
 
-  bar.innerHTML = segments
-    .map((seg, i) => {
-      const width = ((seg.end - seg.start) / totalDuration) * 100;
-      return `<div class="seg-block" data-index="${i}" style="width:${width}%" title="${seg.text.slice(0, 40)}"></div>`;
-    })
-    .join('');
+  let html = '';
+  segs.forEach((seg, i) => {
+    const width = ((seg.end - seg.start) / dur) * 100;
+    html += `<div class="seg-block" data-index="${i}" style="width:${width}%" title="${seg.text.slice(0, 40)}"></div>`;
+    if (editMode && i < segs.length - 1) {
+      html += `<div class="seg-handle" data-handle="${i}"></div>`;
+    }
+  });
+  bar.innerHTML = html;
 
   bar.querySelectorAll('.seg-block').forEach((block) => {
     block.addEventListener('click', () => {
       const idx = parseInt((block as HTMLElement).dataset.index!, 10);
-      if (segments[idx]) {
-        seekToSegment(idx);
-      }
+      seekToSegment(idx);
     });
   });
+
+  if (editMode) {
+    setupHandleDrag(bar, dur);
+  }
+}
+
+function setupHandleDrag(bar: HTMLElement, dur: number) {
+  bar.querySelectorAll('.seg-handle').forEach((handle) => {
+    const el = handle as HTMLElement;
+    const hIdx = parseInt(el.dataset.handle!, 10);
+
+    el.addEventListener('pointerdown', (e: PointerEvent) => {
+      e.preventDefault();
+      el.setPointerCapture(e.pointerId);
+      const barRect = bar.getBoundingClientRect();
+
+      const onMove = (ev: PointerEvent) => {
+        if (!editSegments) return;
+        const ratio = (ev.clientX - barRect.left) / barRect.width;
+        let time = ratio * dur;
+
+        // Constraints: min 0.1s per segment, 20ms gap
+        const minStart = editSegments[hIdx].start + 0.1;
+        const maxEnd = editSegments[hIdx + 1].end - 0.1;
+        time = Math.max(minStart, Math.min(maxEnd, time));
+
+        editSegments[hIdx].end = Math.round((time - 0.01) * 1000) / 1000;
+        editSegments[hIdx + 1].start = Math.round((time + 0.01) * 1000) / 1000;
+
+        // Update block widths directly for performance
+        const blocks = bar.querySelectorAll('.seg-block');
+        const leftBlock = blocks[hIdx] as HTMLElement;
+        const rightBlock = blocks[hIdx + 1] as HTMLElement;
+        if (leftBlock) leftBlock.style.width = `${((editSegments[hIdx].end - editSegments[hIdx].start) / dur) * 100}%`;
+        if (rightBlock) rightBlock.style.width = `${((editSegments[hIdx + 1].end - editSegments[hIdx + 1].start) / dur) * 100}%`;
+
+        // Update subtitle time labels
+        updateSubtitleTimeLabel(hIdx);
+        updateSubtitleTimeLabel(hIdx + 1);
+      };
+
+      const onUp = () => {
+        el.removeEventListener('pointermove', onMove);
+        el.removeEventListener('pointerup', onUp);
+      };
+
+      el.addEventListener('pointermove', onMove);
+      el.addEventListener('pointerup', onUp);
+    });
+  });
+}
+
+function nudgeSegmentStart(index: number, delta: number) {
+  if (!editSegments || !editSegments[index]) return;
+  const seg = editSegments[index];
+  const newStart = Math.round((seg.start + delta) * 100) / 100;
+
+  // Min segment length 0.1s
+  if (seg.end - newStart < 0.1) return;
+
+  // If there's a previous segment, enforce min length and maintain 20ms gap
+  if (index > 0) {
+    const prev = editSegments[index - 1];
+    const newPrevEnd = newStart - 0.02;
+    if (newPrevEnd - prev.start < 0.1) return;
+    prev.end = Math.round(newPrevEnd * 1000) / 1000;
+    updateSubtitleTimeLabel(index - 1);
+    // Update prev segment bar block width
+    const blocks = document.querySelectorAll('.seg-block');
+    const prevBlock = blocks[index - 1] as HTMLElement;
+    if (prevBlock && totalDuration > 0) {
+      prevBlock.style.width = `${((prev.end - prev.start) / totalDuration) * 100}%`;
+    }
+  }
+
+  seg.start = Math.round(newStart * 1000) / 1000;
+  updateSubtitleTimeLabel(index);
+
+  // Update current segment bar block width
+  const blocks = document.querySelectorAll('.seg-block');
+  const block = blocks[index] as HTMLElement;
+  if (block && totalDuration > 0) {
+    block.style.width = `${((seg.end - seg.start) / totalDuration) * 100}%`;
+  }
+}
+
+function updateSubtitleTimeLabel(index: number) {
+  const segs = editSegments;
+  if (!segs || !segs[index]) return;
+  const label = document.querySelector(`.subtitle-row[data-index="${index}"] .seg-time`) as HTMLElement;
+  if (label) {
+    if (editMode) {
+      label.innerHTML = `<button class="nudge-btn" data-dir="-1" data-seg="${index}">&lt;</button> ${formatTimePrecise(segs[index].start)} - ${formatTimePrecise(segs[index].end)} <button class="nudge-btn" data-dir="1" data-seg="${index}">&gt;</button>`;
+      label.querySelectorAll('.nudge-btn').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const el = btn as HTMLElement;
+          const segIdx = parseInt(el.dataset.seg!, 10);
+          const dir = parseInt(el.dataset.dir!, 10);
+          nudgeSegmentStart(segIdx, dir * 0.1);
+        });
+      });
+    } else {
+      label.textContent = `${formatTimePrecise(segs[index].start)} - ${formatTimePrecise(segs[index].end)}`;
+    }
+  }
+}
+
+function formatTimePrecise(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${s.toFixed(1).padStart(4, '0')}`;
 }
 
 function updateSegmentBarHighlight() {
@@ -448,12 +660,14 @@ function updateSegmentBarHighlight() {
 
 function renderSubtitles() {
   const rows = document.getElementById('subtitle-rows')!;
-  rows.innerHTML = segments
+  const segs = editMode && editSegments ? editSegments : segments;
+  rows.innerHTML = segs
     .map(
       (seg, i) => `
     <div class="subtitle-row" data-index="${i}">
       <div class="sub-en">${esc(seg.text)}</div>
       <div class="sub-ko">${esc(seg.translation)}</div>
+      ${editMode ? `<div class="seg-time"><button class="nudge-btn" data-dir="-1" data-seg="${i}">&lt;</button> ${formatTimePrecise(seg.start)} - ${formatTimePrecise(seg.end)} <button class="nudge-btn" data-dir="1" data-seg="${i}">&gt;</button></div>` : ''}
     </div>
   `,
     )
@@ -462,11 +676,21 @@ function renderSubtitles() {
   rows.querySelectorAll('.subtitle-row').forEach((row) => {
     row.addEventListener('click', () => {
       const idx = parseInt((row as HTMLElement).dataset.index!, 10);
-      if (segments[idx]) {
-        seekToSegment(idx);
-      }
+      seekToSegment(idx);
     });
   });
+
+  if (editMode) {
+    rows.querySelectorAll('.nudge-btn').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const el = btn as HTMLElement;
+        const segIdx = parseInt(el.dataset.seg!, 10);
+        const dir = parseInt(el.dataset.dir!, 10);
+        nudgeSegmentStart(segIdx, dir * 0.1);
+      });
+    });
+  }
 }
 
 function highlightSegment() {
@@ -545,6 +769,10 @@ export function destroyPlayer() {
   apEnabled = false;
   loopEnabled = false;
   translationVisible = true;
+  editMode = false;
+  editSegments = null;
+  totalDuration = 0;
+  lastSeekTime = 0;
   fileId = '';
   fileMeta = null;
   playlistId = null;

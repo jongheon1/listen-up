@@ -514,6 +514,63 @@ body {
   background: var(--accent);
 }
 
+/* Segment bar edit mode */
+.segment-bar.edit-mode {
+  height: 32px;
+}
+
+.seg-handle {
+  width: 6px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: var(--border);
+  border-radius: 2px;
+  transition: background 0.15s;
+  touch-action: none;
+}
+
+.seg-handle:hover {
+  background: var(--accent);
+}
+
+/* Segment time label */
+.seg-time {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nudge-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 10px;
+  padding: 0 4px;
+  border-radius: 3px;
+  line-height: 1.4;
+}
+
+.nudge-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Edit actions bar */
+.edit-actions {
+  display: flex;
+  gap: 8px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+  justify-content: flex-end;
+}
+
 /* Subtitle panel */
 .subtitle-panel {
   flex: 1;
