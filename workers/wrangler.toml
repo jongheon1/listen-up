@@ -1,0 +1,26 @@
+name = "listen-up-api"
+main = "src/index.ts"
+compatibility_date = "2026-01-15"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+# /api/* on the custom domain → this Worker. Everything else on that domain → Pages.
+# Effective only after NS swap (zone goes active). Harmless before.
+routes = [
+  { pattern = "listen.jongheon.click/api/*", zone_name = "jongheon.click" },
+]
+
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "listen-up-media"
+
+[[kv_namespaces]]
+binding = "META"
+# id filled by `npm run setup:wrangler` from terraform output, or paste manually
+id = "297f5a4ff72d4a02bbb24cc53d2ae05d"
+
+[vars]
+SOURCE_LANG = "English"
+TARGET_LANG = "Korean"
+
+# OPENAI_API_KEY is set via `wrangler secret put OPENAI_API_KEY`
