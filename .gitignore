@@ -16,6 +16,23 @@ data/
 # Claude Code
 .claude/
 
+# Workers
+workers/node_modules/
+workers/.wrangler/
+workers/.dev.vars
+workers/dist/
+workers/worker-configuration.d.ts
+
+# Terraform (lock file intentionally committed for reproducibility)
+infra/.terraform/
+infra/*.tfstate
+infra/*.tfstate.*
+infra/*.tfvars
+!infra/terraform.tfvars.example
+
+# Migration tmp
+.migrate-tmp/
+
 # Audio files
 *.mp3
 
