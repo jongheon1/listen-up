@@ -1,0 +1,5 @@
+# Copy to terraform.tfvars (gitignored) and fill in.
+# Or set TF_VAR_cloudflare_api_token / TF_VAR_cloudflare_account_id in your env.
+
+cloudflare_account_id = "1d3fb81033131596ed3d80980ec10cba"
+# cloudflare_api_token = "<set via env: TF_VAR_cloudflare_api_token>"
